@@ -1,6 +1,7 @@
 import Tesseract from 'tesseract.js';
 import fs from 'fs';
 import path from 'path';
+import { PDFParse} from "pdf-parse";
 
 /**
  * Runs OCR on a file to extract text
@@ -13,9 +14,9 @@ export async function runOCR(filePath: string): Promise<string> {
         // Handle PDF files
         if (ext === '.pdf') {
             const dataBuffer = fs.readFileSync(filePath);
-            // Use dynamic require for CommonJS module
-            const pdfParse = require('pdf-parse');
-            const pdfData = await pdfParse(dataBuffer);
+            const parser = new PDFParse({ data: dataBuffer });
+            const pdfData = await parser.getText();
+
             return pdfData.text;
         }
         
