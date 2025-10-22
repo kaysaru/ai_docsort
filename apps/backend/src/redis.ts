@@ -5,6 +5,7 @@ import { runOCR } from "./services/ocr";
 import { runML } from "./services/ml";
 import { prisma } from "./db/db";
 import { minioClient } from "./minio";
+import { mapDocumentTypeToCatalog } from "./services/catalogMapper";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -54,7 +55,20 @@ export const fileWorker = new Worker(
       
       console.log(`ML classification: ${mlResult.documentType} (${(mlResult.confidence * 100).toFixed(1)}% confidence)`);
 
-      // Update document with results
+      // Map document type to catalog
+      const catalogCode = mapDocumentTypeToCatalog(mlResult.documentType);
+      console.log(`Auto-assigning to catalog: ${catalogCode}`);
+      
+      // Find the target catalog
+      const targetCatalog = await prisma.catalog.findFirst({
+        where: { code: catalogCode }
+      });
+
+      if (!targetCatalog) {
+        throw new Error(`Catalog with code ${catalogCode} not found`);
+      }
+
+      // Update document with results and assign to detected catalog
       await prisma.document.update({
         where: { id: documentId },
         data: {
@@ -62,9 +76,12 @@ export const fileWorker = new Worker(
           ocrText,
           documentType: mlResult.documentType,
           confidence: mlResult.confidence,
-          filePath: tempFilePath
+          filePath: tempFilePath,
+          catalogId: targetCatalog.id // Auto-assign catalog
         }
       });
+      
+      console.log(`Document assigned to catalog: ${targetCatalog.name}`);
 
       // Clean up temp file (optional - you may want to keep it)
       // fs.unlinkSync(tempFilePath);

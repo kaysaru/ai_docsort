@@ -33,32 +33,30 @@ export const appRouter = router({
     }),
     startUploadDocument: publicProcedure.input(startUploadSchema)
         .mutation(async opts => {
-            const { catalogCode, objectName, idn } = opts.input;
+            const { objectName, filename, idn } = opts.input;
             
-            // Find catalog by code
-            const catalog = await prisma.catalog.findFirst({
-                where: { code: catalogCode }
+            // Use a temporary "personal" catalog for initial upload
+            // The worker will reassign to correct catalog after ML classification
+            const tempCatalog = await prisma.catalog.findFirst({
+                where: { code: 'personal' }
             });
             
-            if (!catalog) {
-                throw new Error(`Catalog with code ${catalogCode} not found`);
+            if (!tempCatalog) {
+                throw new Error('Default catalog not found. Please run seed script.');
             }
             
-            // Extract filename from objectName
-            const filename = objectName.split('_').slice(2).join('_');
-            
-            // Create document record
+            // Create document record with temporary catalog
             const document = await prisma.document.create({
                 data: {
                     filename,
                     objectName,
-                    catalogId: catalog.id,
+                    catalogId: tempCatalog.id,
                     idn,
                     status: 'pending'
                 }
             });
             
-            // Queue job for processing
+            // Queue job for processing (OCR + ML + auto-catalog assignment)
             const job = await fileQueue.add('processFile', {
                 documentId: document.id,
                 objectName
@@ -70,7 +68,7 @@ export const appRouter = router({
                 data: { jobId: job.id }
             });
             
-            console.log(`Document ${document.id} created and job ${job.id} queued`);
+            console.log(`Document ${document.id} created and job ${job.id} queued for auto-classification`);
             
             return {
                 documentId: document.id,
