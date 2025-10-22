@@ -1,10 +1,19 @@
 import { useState } from 'react'
-import { Upload, FileText, X } from 'lucide-react'
+import { Upload, FileText, X, CheckCircle, AlertCircle } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { trpc } from '@/lib/trpc'
+import { useNavigate } from '@tanstack/react-router'
 
 export const LoadPage = () => {
     const [isDragging, setIsDragging] = useState(false)
     const [files, setFiles] = useState<File[]>([])
+    const [uploading, setUploading] = useState(false)
+    const [uploadedIds, setUploadedIds] = useState<number[]>([])
+    const navigate = useNavigate()
+    
+    const getUploadUrlMutation = trpc.getUploadUrl.useMutation()
+    const startUploadMutation = trpc.startUploadDocument.useMutation()
 
     const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault()
@@ -47,6 +56,58 @@ export const LoadPage = () => {
         if (bytes < 1024) return bytes + ' B'
         if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB'
         return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
+    }
+
+    const handleUpload = async () => {
+        if (files.length === 0) return
+        
+        setUploading(true)
+        const documentIds: number[] = []
+        
+        try {
+            for (const file of files) {
+                // Step 1: Get presigned URL using tRPC mutation
+                const { url, objectName } = await getUploadUrlMutation.mutateAsync({
+                    filename: file.name,
+                    catalogCode: 'temp' // Temporary, will be auto-assigned after ML
+                })
+                
+                // Step 2: Upload directly to MinIO using presigned URL
+                // Note: This must use fetch as it's a direct upload to MinIO storage
+                const uploadResponse = await fetch(url, {
+                    method: 'PUT',
+                    body: file,
+                    headers: {
+                        'Content-Type': file.type
+                    }
+                })
+                
+                if (!uploadResponse.ok) {
+                    throw new Error(`Upload failed for ${file.name}`)
+                }
+                
+                // Step 3: Start processing using tRPC mutation
+                const result = await startUploadMutation.mutateAsync({
+                    objectName,
+                    filename: file.name
+                })
+                
+                documentIds.push(result.documentId)
+            }
+            
+            setUploadedIds(documentIds)
+            
+            // Navigate to processing page after successful upload
+            setTimeout(() => {
+                navigate({ to: '/processing' })
+            }, 1000)
+            
+        } catch (error) {
+            console.error('Upload failed:', error)
+            alert('Upload failed. Please try again.')
+        } finally {
+            setUploading(false)
+        }
     }
 
     return (
@@ -93,9 +154,28 @@ export const LoadPage = () => {
 
                         {files.length > 0 && (
                             <div className="mt-6 space-y-3">
-                                <p className="text-sm font-medium text-gray-700">
-                                    Uploaded Files ({files.length})
-                                </p>
+                                <div className="flex items-center justify-between">
+                                    <p className="text-sm font-medium text-gray-700">
+                                        Selected Files ({files.length})
+                                    </p>
+                                    <Button 
+                                        onClick={handleUpload}
+                                        disabled={uploading}
+                                        className="gap-2"
+                                    >
+                                        {uploading ? (
+                                            <>
+                                                <Upload className="w-4 h-4 animate-spin" />
+                                                Uploading...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Upload className="w-4 h-4" />
+                                                Upload & Process
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
                                 {files.map((file, index) => (
                                     <div
                                         key={index}
@@ -114,13 +194,22 @@ export const LoadPage = () => {
                                         </div>
                                         <button
                                             onClick={() => removeFile(index)}
-                                            className="p-1 hover:bg-gray-200 rounded transition-colors"
+                                            disabled={uploading}
+                                            className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50"
                                             aria-label="Remove file"
                                         >
                                             <X className="w-4 h-4 text-gray-500" />
                                         </button>
                                     </div>
                                 ))}
+                                {uploadedIds.length > 0 && (
+                                    <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg border border-green-200">
+                                        <CheckCircle className="w-5 h-5 text-green-600" />
+                                        <p className="text-sm text-green-800">
+                                            Successfully uploaded {uploadedIds.length} file(s). Redirecting to processing page...
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </CardContent>

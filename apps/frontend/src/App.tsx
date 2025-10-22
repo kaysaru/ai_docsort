@@ -15,6 +15,9 @@ function App() {
                         <Link to='/load'>
                             <Button variant='ghost'>Load</Button>
                         </Link>
+                        <Link to='/processing'>
+                            <Button variant='ghost'>Processing</Button>
+                        </Link>
                     </div>
                     <Outlet/>
                 </div>
