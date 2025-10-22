@@ -8,7 +8,7 @@ function App() {
             <div className='flex flex-row h-full'>
                 <div className='flex flex-col w-full'>
 
-                    <div className='sticky top-0 w-full bg-background border-b py-3 px-1'>
+                    <div className='sticky top-0 w-full bg-background border-b py-3 px-1 mb-3'>
                         <Link to='/'>
                             <Button variant='ghost'>Home</Button>
                         </Link>
