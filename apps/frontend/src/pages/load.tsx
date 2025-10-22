@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Upload, FileText, X, CheckCircle, AlertCircle } from 'lucide-react'
+import { Upload, FileText, X, CheckCircle } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { trpc } from '@/lib/trpc'

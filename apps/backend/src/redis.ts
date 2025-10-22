@@ -51,7 +51,7 @@ export const fileWorker = new Worker(
       console.log('Running ML classification...');
       
       // Run ML classification
-      const mlResult = runML(ocrText);
+      const mlResult = await runML(ocrText);
       
       console.log(`ML classification: ${mlResult.documentType} (${(mlResult.confidence * 100).toFixed(1)}% confidence)`);
 
