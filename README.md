@@ -198,6 +198,39 @@ source .venv/bin/activate  # macOS/Linux
 pip install -r requirements.txt
 ```
 
+**Optional: Pre-download ML Model (Recommended)**
+
+The ML model is ~1.6GB and can take time to download on first run. Pre-download it:
+
+```bash
+# Make sure virtual environment is activated
+source .venv/bin/activate
+
+# Download model (will be cached)
+python -c "from transformers import pipeline; pipeline('zero-shot-classification', model='facebook/bart-large-mnli')"
+```
+
+This downloads the model once and caches it in `~/.cache/huggingface/`. All future runs will use the cached version.
+
+<details>
+<summary><b>Alternative: Use Smaller/Faster Model</b></summary>
+
+If download is too slow, you can use a smaller model by editing `apps/ml-service/classifier.py`:
+
+```python
+# Change this line (in classifier.py):
+def __init__(self, model_name: str = "facebook/bart-large-mnli"):
+
+# To use a smaller model:
+def __init__(self, model_name: str = "facebook/bart-base"):
+```
+
+**Model sizes:**
+- `facebook/bart-large-mnli`: ~1.6GB (best accuracy)
+- `facebook/bart-base`: ~500MB (good accuracy, faster)
+- `typeform/distilbert-base-uncased-mnli`: ~250MB (decent accuracy, fastest)
+</details>
+
 ## 🎬 Running the Application
 
 ### Step 0: Start Infrastructure (Docker)
