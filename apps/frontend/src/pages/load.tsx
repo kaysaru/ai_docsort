@@ -55,7 +55,7 @@ export const LoadPage = () => {
                 <p className='text-2xl font-semibold'>Load documents</p>
             </div>
 
-            <div className='max-w-2xl'>
+            <div className='w-full'>
                 <Card>
                     <CardContent>
                         <div

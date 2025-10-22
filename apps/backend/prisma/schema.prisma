@@ -22,4 +22,33 @@ model Catalog {
   parentId Int?
   parent   Catalog?  @relation("CatalogToCatalog", fields: [parentId], references: [id])
   children Catalog[] @relation("CatalogToCatalog")
+
+  documents Document[]
+}
+
+model Document {
+  id        Int      @id @default(autoincrement())
+  filename  String   @db.VarChar(255)
+  objectName String  @db.VarChar(255)
+  filePath  String?  @db.VarChar(500)
+  
+  catalogId Int
+  catalog   Catalog  @relation(fields: [catalogId], references: [id])
+  
+  idn       String?  @db.VarChar(100)
+  
+  // OCR results
+  ocrText   String?  @db.Text
+  
+  // ML classification results
+  documentType String? @db.VarChar(100) // passport, driver_license, etc.
+  confidence   Float?
+  
+  // Processing status
+  status    String   @default("pending") @db.VarChar(50) // pending, processing, completed, failed
+  jobId     String?  @db.VarChar(100)
+  error     String?  @db.Text
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

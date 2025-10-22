@@ -4,6 +4,7 @@ import {catalogSchema, clientSchema, startUploadSchema, uploadDocumentSchema} fr
 import { minioClient } from "./minio";
 import z from "zod/v4";
 import {prisma} from "./db/db";
+import { fileQueue } from "./redis";
 
 export const createContext = ({
     req,
@@ -32,14 +33,106 @@ export const appRouter = router({
     }),
     startUploadDocument: publicProcedure.input(startUploadSchema)
         .mutation(async opts => {
-            await minioClient.fGetObject(bucket, opts.input.objectName, opts.input.filePath)
-            // const job = await fileQueue.add('processFile', {
-            //     filePath: opts.input.catalogCode
-            // })
-            console.log(opts.input)
-            return {
-                jobId: opts.input
+            const { catalogCode, objectName, idn } = opts.input;
+            
+            // Find catalog by code
+            const catalog = await prisma.catalog.findFirst({
+                where: { code: catalogCode }
+            });
+            
+            if (!catalog) {
+                throw new Error(`Catalog with code ${catalogCode} not found`);
             }
+            
+            // Extract filename from objectName
+            const filename = objectName.split('_').slice(2).join('_');
+            
+            // Create document record
+            const document = await prisma.document.create({
+                data: {
+                    filename,
+                    objectName,
+                    catalogId: catalog.id,
+                    idn,
+                    status: 'pending'
+                }
+            });
+            
+            // Queue job for processing
+            const job = await fileQueue.add('processFile', {
+                documentId: document.id,
+                objectName
+            });
+            
+            // Update document with job ID
+            await prisma.document.update({
+                where: { id: document.id },
+                data: { jobId: job.id }
+            });
+            
+            console.log(`Document ${document.id} created and job ${job.id} queued`);
+            
+            return {
+                documentId: document.id,
+                jobId: job.id,
+                status: 'pending'
+            }
+        }),
+    getDocumentStatus: publicProcedure
+        .input(z.object({ documentId: z.number() }))
+        .query(async ({ input }) => {
+            const document = await prisma.document.findUnique({
+                where: { id: input.documentId },
+                include: { catalog: true }
+            });
+            
+            if (!document) {
+                throw new Error('Document not found');
+            }
+            
+            return {
+                id: document.id,
+                filename: document.filename,
+                status: document.status,
+                documentType: document.documentType,
+                confidence: document.confidence,
+                error: document.error,
+                createdAt: document.createdAt,
+                catalog: document.catalog
+            };
+        }),
+    getDocument: publicProcedure
+        .input(z.object({ documentId: z.number() }))
+        .query(async ({ input }) => {
+            const document = await prisma.document.findUnique({
+                where: { id: input.documentId },
+                include: { catalog: true }
+            });
+            
+            if (!document) {
+                throw new Error('Document not found');
+            }
+            
+            return document;
+        }),
+    listDocuments: publicProcedure
+        .input(z.object({ 
+            catalogId: z.number().optional(),
+            status: z.string().optional(),
+            limit: z.number().default(50)
+        }))
+        .query(async ({ input }) => {
+            const documents = await prisma.document.findMany({
+                where: {
+                    ...(input.catalogId && { catalogId: input.catalogId }),
+                    ...(input.status && { status: input.status })
+                },
+                include: { catalog: true },
+                orderBy: { createdAt: 'desc' },
+                take: input.limit
+            });
+            
+            return documents;
         }),
     catalogs: publicProcedure.input(z.number()).query(async ({ input }) => {
         const catalog = await prisma.catalog.findFirst({
