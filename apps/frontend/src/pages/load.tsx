@@ -1,5 +1,5 @@
 export const LoadPage = () => {
     return (
-        <div className='bg-teal-100'>123</div>
+        <div className=''>23</div>
     )
 }
