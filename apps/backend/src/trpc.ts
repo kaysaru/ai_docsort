@@ -1,7 +1,9 @@
 import { initTRPC } from "@trpc/server";
 import * as trpcExpress from '@trpc/server/adapters/express'
-import { clientSchema, startUploadSchema, uploadDocumentSchema } from "./schemas";
+import {catalogSchema, clientSchema, startUploadSchema, uploadDocumentSchema} from "./schemas";
 import { minioClient } from "./minio";
+import z from "zod/v4";
+import {prisma} from "./db/db";
 
 export const createContext = ({
     req,
@@ -39,6 +41,13 @@ export const appRouter = router({
                 jobId: opts.input
             }
         }),
+    catalogs: publicProcedure.input(z.number()).query(async ({ input }) => {
+        const catalog = await prisma.catalog.findFirst({
+            where: { id: input },
+            include: { parent: true, children: true }
+        })
+        return catalogSchema.parse(catalog)
+    })
 })
 
 export type AppRouter = typeof appRouter;

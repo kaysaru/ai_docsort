@@ -13,3 +13,13 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+model Catalog {
+  id   Int    @id @default(autoincrement())
+  name String @db.VarChar(255)
+  code String @db.VarChar(255)
+
+  parentId Int?
+  parent   Catalog?  @relation("CatalogToCatalog", fields: [parentId], references: [id])
+  children Catalog[] @relation("CatalogToCatalog")
+}
