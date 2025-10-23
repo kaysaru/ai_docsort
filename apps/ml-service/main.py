@@ -8,6 +8,7 @@ from typing import Dict
 import logging
 
 from classifier import get_classifier
+from extractor import get_extractor
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -113,6 +114,74 @@ async def classify_document(request: ClassificationRequest):
         raise HTTPException(
             status_code=500,
             detail=f"Classification failed: {str(e)}"
+        )
+
+
+class ExtractionRequest(BaseModel):
+    document_type: str
+    text: str
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "document_type": "passport",
+                "text": "ПАСПОРТ ГРАЖДАНИНА РФ\nФамилия ИВАНОВ\nИмя ИВАН..."
+            }
+        }
+
+
+class ExtractionResponse(BaseModel):
+    extracted_data: Dict
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "extracted_data": {
+                    "fullName": "ИВАНОВ ИВАН ИВАНОВИЧ",
+                    "dateOfBirth": "01.01.1990",
+                    "sex": "M",
+                    "passportNumber": "1234 567890"
+                }
+            }
+        }
+
+
+@app.post("/extract", response_model=ExtractionResponse)
+async def extract_document_info(request: ExtractionRequest):
+    """
+    Extract structured information from OCR text based on document type
+    
+    Args:
+        request: Extraction request with document type and text
+        
+    Returns:
+        Extracted structured information
+    """
+    try:
+        if not request.text or len(request.text.strip()) < 10:
+            raise HTTPException(
+                status_code=400,
+                detail="Text too short for extraction"
+            )
+        
+        if not request.document_type:
+            raise HTTPException(
+                status_code=400,
+                detail="Document type is required"
+            )
+        
+        logger.info(f"Received extraction request for {request.document_type} (text length: {len(request.text)})")
+        
+        extractor = get_extractor()
+        extracted_data = extractor.extract(request.document_type, request.text)
+        
+        return ExtractionResponse(extracted_data=extracted_data)
+        
+    except Exception as e:
+        logger.error(f"Extraction error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Extraction failed: {str(e)}"
         )
 
 
