@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { trpc } from '@/lib/trpc'
 import { FileText, Clock, CheckCircle, XCircle, Loader2, FolderOpen } from 'lucide-react'
+import { DocumentDetailsModal } from '@/components/DocumentDetailsModal'
 
 const StatusBadge = ({ status }: { status: string }) => {
     const styles = {
@@ -47,12 +48,29 @@ const DocumentTypeDisplay = ({ type, confidence }: { type?: string; confidence?:
 
 export const ProcessingPage = () => {
     const [autoRefresh, setAutoRefresh] = useState(true)
+    const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(null)
+    const [modalOpen, setModalOpen] = useState(false)
     
     const { data: documents, refetch } = trpc.listDocuments.useQuery({
         limit: 50
     }, {
         refetchInterval: autoRefresh ? 3000 : false, // Auto-refresh every 3 seconds
     })
+    
+    const { data: selectedDocument } = trpc.getDocument.useQuery(
+        { documentId: selectedDocumentId! },
+        { enabled: !!selectedDocumentId }
+    )
+    
+    const handleDocumentClick = (docId: number) => {
+        setSelectedDocumentId(docId)
+        setModalOpen(true)
+    }
+    
+    const handleCloseModal = () => {
+        setModalOpen(false)
+        setSelectedDocumentId(null)
+    }
 
     const stats = {
         total: documents?.length || 0,
@@ -134,7 +152,12 @@ export const ProcessingPage = () => {
                             {documents.map((doc) => (
                                 <div
                                     key={doc.id}
-                                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors"
+                                    onClick={() => doc.status === 'completed' && handleDocumentClick(doc.id)}
+                                    className={`flex items-center justify-between p-4 border rounded-lg transition-colors ${
+                                        doc.status === 'completed' 
+                                            ? 'cursor-pointer hover:bg-gray-50 hover:border-blue-300' 
+                                            : 'cursor-default hover:bg-gray-50'
+                                    }`}
                                 >
                                     <div className="flex items-center gap-4 flex-1">
                                         <FileText className="w-8 h-8 text-gray-400 flex-shrink-0" />
@@ -181,6 +204,13 @@ export const ProcessingPage = () => {
                     )}
                 </CardContent>
             </Card>
+            
+            {/* Document Details Modal */}
+            <DocumentDetailsModal 
+                document={selectedDocument || null}
+                open={modalOpen}
+                onClose={handleCloseModal}
+            />
         </div>
     )
 }
