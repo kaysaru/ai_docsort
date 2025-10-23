@@ -55,6 +55,35 @@ export const fileWorker = new Worker(
       
       console.log(`ML classification: ${mlResult.documentType} (${(mlResult.confidence * 100).toFixed(1)}% confidence)`);
 
+      // Extract structured information using LLM
+      console.log('Extracting structured information...');
+      let extractedData = null;
+      
+      try {
+        const mlServiceUrl = process.env.ML_SERVICE_URL || 'http://localhost:8000';
+        const extractResponse = await fetch(`${mlServiceUrl}/extract`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            document_type: mlResult.documentType,
+            text: ocrText
+          })
+        });
+
+        if (extractResponse.ok) {
+          const extractResult = await extractResponse.json();
+          extractedData = extractResult.extracted_data;
+          console.log(`Extracted ${Object.keys(extractedData).length} fields`);
+        } else {
+          console.warn('Extraction failed, continuing without structured data');
+        }
+      } catch (extractError) {
+        console.error('Extraction error:', extractError);
+        console.warn('Continuing without structured data');
+      }
+
       // Map document type to catalog
       const catalogCode = mapDocumentTypeToCatalog(mlResult.documentType);
       console.log(`Auto-assigning to catalog: ${catalogCode}`);
@@ -76,6 +105,7 @@ export const fileWorker = new Worker(
           ocrText,
           documentType: mlResult.documentType,
           confidence: mlResult.confidence,
+          extractedData: extractedData, // Store extracted structured data
           filePath: tempFilePath,
           catalogId: targetCatalog.id // Auto-assign catalog
         }

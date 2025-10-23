@@ -44,6 +44,9 @@ model Document {
   documentType String? @db.VarChar(100) // passport, driver_license, etc.
   confidence   Float?
   
+  // Extracted structured data (JSON)
+  extractedData Json?
+  
   // Processing status
   status    String   @default("pending") @db.VarChar(50) // pending, processing, completed, failed
   jobId     String?  @db.VarChar(100)
