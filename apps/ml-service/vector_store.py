@@ -20,38 +20,68 @@ class VectorStore:
         Initialize vector store with ChromaDB and Ollama clients
         
         Args:
-            chromadb_host: ChromaDB host (default: http://localhost:8001)
-            ollama_host: Ollama API host (default: http://localhost:11434)
+            chromadb_host: ChromaDB host (default: chromadb:8000 for Docker, localhost:8001 for local)
+            ollama_host: Ollama API host (default: http://ollama:11434 for Docker)
         """
-        chroma_host = chromadb_host or os.getenv('CHROMADB_HOST', 'http://localhost:8001')
-        ollama_url = ollama_host or os.getenv('OLLAMA_HOST', 'http://localhost:11434')
+        # Use different defaults for Docker vs local development
+        default_chroma = os.getenv('CHROMADB_HOST', 'localhost:8001')
+        default_ollama = os.getenv('OLLAMA_HOST', 'http://localhost:11434')
+        
+        chroma_host = chromadb_host or default_chroma
+        ollama_url = ollama_host or default_ollama
         
         logger.info(f"Connecting to ChromaDB at {chroma_host}")
         logger.info(f"Connecting to Ollama at {ollama_url}")
         
+        # Parse ChromaDB host
+        chroma_host_clean = chroma_host.replace('http://', '').replace('https://', '')
+        host_parts = chroma_host_clean.split(':')
+        chroma_hostname = host_parts[0]
+        chroma_port = int(host_parts[1]) if len(host_parts) > 1 else 8000
+        
         # Initialize ChromaDB client
-        self.chroma_client = chromadb.HttpClient(
-            host=chroma_host.replace('http://', '').split(':')[0],
-            port=int(chroma_host.split(':')[-1]) if ':' in chroma_host else 8000,
-            settings=Settings(
-                anonymized_telemetry=False,
-                allow_reset=True
+        try:
+            # Create settings without chroma_api_impl (it's deprecated in newer versions)
+            settings = Settings(
+                anonymized_telemetry=True
             )
-        )
+            
+            self.chroma_client = chromadb.HttpClient(
+                host=chroma_hostname,
+                port=chroma_port,
+                settings=settings
+            )
+            logger.info(f"Connected to ChromaDB at {chroma_hostname}:{chroma_port}")
+        except Exception as e:
+            logger.error(f"Failed to connect to ChromaDB: {e}")
+            logger.error(f"Trying without custom settings...")
+            try:
+                # Fallback: try without settings
+                self.chroma_client = chromadb.HttpClient(
+                    host=chroma_hostname,
+                    port=chroma_port
+                )
+                logger.info(f"Connected to ChromaDB (without custom settings)")
+            except Exception as e2:
+                logger.error(f"Failed even without settings: {e2}")
+                raise
         
         # Initialize Ollama client for embeddings
         self.ollama_client = Client(host=ollama_url)
         self.embedding_model = os.getenv('OLLAMA_EMBEDDING_MODEL', 'nomic-embed-text')
         
         # Get or create collection for documents
+        # Use get_or_create_collection to avoid version compatibility issues
         try:
             self.collection = self.chroma_client.get_or_create_collection(
                 name="documents",
                 metadata={"description": "Document OCR texts and extracted data"}
             )
-            logger.info(f"Collection 'documents' ready with {self.collection.count()} documents")
+            doc_count = self.collection.count()
+            logger.info(f"Collection 'documents' ready with {doc_count} documents")
         except Exception as e:
             logger.error(f"Failed to initialize collection: {e}")
+            logger.error(f"Error type: {type(e).__name__}")
             raise
     
     def _get_embedding(self, text: str) -> List[float]:
