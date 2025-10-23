@@ -4,6 +4,7 @@ import 'dotenv/config'
 import * as trpcExpress from '@trpc/server/adapters/express';
 import { appRouter, createContext } from './trpc';
 import { minioClient } from './minio';
+import { fileWorker } from './redis';
 
 export const app = express()
 

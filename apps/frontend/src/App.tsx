@@ -1,35 +1,29 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+
+import {Link, Outlet} from "@tanstack/react-router";
+import {Button} from "@/components/ui/button.tsx";
 
 function App() {
-  const [count, setCount] = useState(0)
+    return (
+        <div className='flex flex-col max-w-4xl w-full'>
+            <div className='flex flex-row h-full'>
+                <div className='flex flex-col w-full'>
 
-  return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+                    <div className='sticky top-0 w-full bg-background border-b py-3 px-1 mb-3'>
+                        <Link to='/'>
+                            <Button variant='ghost'>Home</Button>
+                        </Link>
+                        <Link to='/load'>
+                            <Button variant='ghost'>Load</Button>
+                        </Link>
+                        <Link to='/processing'>
+                            <Button variant='ghost'>Processing</Button>
+                        </Link>
+                    </div>
+                    <Outlet/>
+                </div>
+            </div>
+        </div>
+    )
 }
 
 export default App

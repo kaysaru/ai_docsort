@@ -1,11 +1,17 @@
 import { z } from "zod/v4";
 
-export const catalogSchema = z.object({
+export const catalogBaseSchema = z.object({
     id: z.number(),
-    name: z.number(),
-    code: z.number(),
+    name: z.string(),
+    code: z.string(),
     parentId: z.number().nullable(),
-    children: z.array(z.any()),
 })
+
+export const catalogSchema = z.lazy(() =>
+    catalogBaseSchema.extend({
+        parent: catalogBaseSchema.nullable(),
+        children: z.array(catalogBaseSchema),
+    })
+)
 
 export type Catalog = z.infer<typeof catalogSchema>
