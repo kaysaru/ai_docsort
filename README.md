@@ -7,8 +7,10 @@ Intelligent document sorting system with automatic catalog detection using OCR a
 - **Automatic Document Classification** - Upload documents without selecting a category
 - **OCR Text Extraction** - Extracts text from PDFs and images (Russian + English)
 - **ML-Powered Detection** - Uses Hugging Face Transformers for document type recognition
+- **LLM Information Extraction** - Uses Ollama to extract structured data from documents
 - **Auto-Catalog Assignment** - Automatically organizes documents into correct catalogs
 - **Real-time Processing** - Watch documents being processed with live status updates
+- **Interactive Document Details** - Click documents to view extracted information in a modal
 - **Background Workers** - Async processing with BullMQ job queue
 
 ## 🏗️ Architecture
@@ -16,7 +18,7 @@ Intelligent document sorting system with automatic catalog detection using OCR a
 ```
 ┌─────────────────┐
 │   Frontend      │  React + Vite + TanStack Router
-│   (Port 5174)   │  Drag & drop uploads, real-time status
+│   (Port 5173)   │  Drag & drop uploads, real-time status
 └────────┬────────┘
          │
          ├─────────────────────────────────────┐
@@ -29,14 +31,14 @@ Intelligent document sorting system with automatic catalog detection using OCR a
 │  + BullMQ       │                   │  + Transformers│
 └────┬────┬───┬───┘                   └────────────────┘
      │    │   │
-     │    │   └──────────┐
-     │    │              │
-┌────▼────▼───┐   ┌──────▼──────┐   ┌──────────┐
-│ PostgreSQL  │   │   Redis     │   │  MinIO   │
-│ (Port 5432) │   │ (Port 6379) │   │ (Port    │
-│             │   │             │   │  9000)   │
-│  Documents  │   │ Job Queue   │   │ Storage  │
-└─────────────┘   └─────────────┘   └──────────┘
+     │    │   └────────┐
+     │    │            │
+┌────▼────▼───┐ ┌──────▼──────┐ ┌──────────────┐ ┌──────────────────┐ ┌─────────────────┐
+│ PostgreSQL  │ │   Redis     │ │    MinIO     │ │     Ollama       │ │     ChromaDB    │
+│ (Port 5432) │ │ (Port 6379) │ │ (Port 9000)  │ │   (Port 11434)   │ │   (Port 8001)   │
+│             │ │             │ │              │ │                  │ │                 │
+│  Documents  │ │ Job Queue   │ │   Storage    │ │ Data Extraction  │ │       RAG       │
+└─────────────┘ └─────────────┘ └──────────────┘ └──────────────────┘ └─────────────────┘
 ```
 
 ## 📁 Project Structure
@@ -44,24 +46,26 @@ Intelligent document sorting system with automatic catalog detection using OCR a
 ```
 ai_docsort/
 ├── apps/
-│   ├── frontend/          # React frontend with Vite
+│   ├── frontend/              # React frontend with Vite
 │   │   ├── src/
-│   │   │   ├── pages/     # Upload & Processing pages
-│   │   │   ├── lib/       # tRPC client
+│   │   │   ├── pages/         # Upload & Processing pages
+│   │   │   ├── lib/           # tRPC client
 │   │   │   └── components/
 │   │   └── package.json
 │   │
-│   ├── backend/           # Node.js backend
+│   ├── backend/               # Node.js backend
 │   │   ├── src/
-│   │   │   ├── services/  # OCR, ML client, catalog mapper
-│   │   │   ├── db/        # Prisma client
-│   │   │   └── schemas/   # Zod schemas
-│   │   ├── prisma/        # Database schema
+│   │   │   ├── services/      # OCR, ML client, catalog mapper
+│   │   │   ├── db/            # Prisma client
+│   │   │   └── schemas/       # Zod schemas
+│   │   ├── prisma/            # Database schema
 │   │   └── package.json
 │   │
-│   └── ml-service/        # Python ML service
-│       ├── classifier.py  # Zero-shot classification
-│       ├── main.py        # FastAPI app
+│   └── ml-service/            # Python ML service
+│       ├── classifier.py      # Zero-shot classification
+│       ├── main.py            # FastAPI app
+│       ├── rag-extractor.py   # ChromaDB extractor
+│       ├── vector-store.py    # ChromaDB store
 │       └── requirements.txt
 │
 └── README.md
@@ -93,7 +97,7 @@ pnpm install
 
 #### 2. Setup Infrastructure with Docker
 
-**Start all infrastructure services (PostgreSQL, Redis, MinIO):**
+**Start all infrastructure services (PostgreSQL, Redis, MinIO, Ollama, ChromeDB):**
 
 ```bash
 # Start services in the background
@@ -111,45 +115,33 @@ docker-compose logs -f
 - Redis: `localhost:6379`
 - MinIO API: `localhost:9000`
 - MinIO Console: `localhost:9001` (minioadmin / minioadmin)
+- ChromaDB: `localhost:8001`
+- **Ollama**: `localhost:11434` (automatically pulls qwen2.5:3b model on first run)
+
+**Ollama Model Auto-Setup:**
+
+The docker-compose includes an `ollama-init` service that automatically:
+1. Waits for Ollama to be healthy
+2. Checks if the qwen2.5:3b model exists
+3. Downloads it if not present (~2GB, takes 2-5 minutes on first run)
+4. Exits after model is ready
+
+You can check the model download progress with:
+```bash
+# View Ollama init logs
+docker-compose logs -f ollama-init
+
+# Check if model is ready
+docker exec -it ai_docsort_ollama ollama list
+```
 
 **Stop services when done:**
 ```bash
 docker-compose down
 
-# To remove volumes (WARNING: deletes all data)
+# To remove volumes (WARNING: deletes all data including downloaded models)
 docker-compose down -v
 ```
-
-<details>
-<summary><b>Alternative: Manual Installation (without Docker)</b></summary>
-
-**PostgreSQL:**
-```bash
-# Create database
-psql -U postgres
-CREATE DATABASE mydb;
-CREATE USER myuser WITH PASSWORD 'mypassword';
-GRANT ALL PRIVILEGES ON DATABASE mydb TO myuser;
-\q
-```
-
-**Redis:**
-```bash
-# Start Redis (macOS with Homebrew)
-brew services start redis
-
-# Or run directly
-redis-server
-```
-
-**MinIO:**
-```bash
-# Download and run MinIO (macOS)
-brew install minio
-mkdir -p ~/minio-data
-minio server ~/minio-data --console-address :9001
-```
-</details>
 
 #### 3. Configure Environment Variables
 
@@ -245,7 +237,7 @@ docker-compose up -d
 docker-compose ps
 ```
 
-You should see all three services (postgres, redis, minio) with status "Up (healthy)".
+You should see all five services (postgres, redis, minio, ollama, chromadb) with status "Up (healthy)".
 
 ### Then start the application services in 3 terminals:
 
@@ -277,13 +269,13 @@ cd apps/frontend
 pnpm dev
 ```
 
-✅ Ready when you see: `Local: http://localhost:5174/`
+✅ Ready when you see: `Local: http://localhost:5173/`
 
 **That's it! All services are now running. 🚀**
 
 ## 🧪 Testing the Application
 
-1. **Open the app**: http://localhost:5174
+1. **Open the app**: http://localhost:5173
 
 2. **Upload a document**:
    - Navigate to "Load" page
@@ -299,6 +291,54 @@ pnpm dev
    - Document type detected (passport, driver_license, etc.)
    - Confidence score
    - Auto-assigned catalog
+
+5. **View extracted information**:
+   - **Click on any completed document** to open a modal
+   - View all extracted structured data:
+     - For **Passports**: Full Name, Date of Birth, Sex, Passport Number, etc.
+     - For **Driver Licenses**: License Number, Categories (A,B,C), Expiry Date, etc.
+     - For **Certificates**: Certificate Type, Issuing Organization, etc.
+   - See confidence score and classification details
+   - All fields are automatically extracted by Ollama LLM!
+
+## 🎨 Extracted Information Examples
+
+### Passport
+```json
+{
+  "fullName": "IVANOV IVAN IVANOVICH",
+  "dateOfBirth": "01.01.1990",
+  "sex": "M",
+  "passportNumber": "1234 567890",
+  "issueDate": "01.01.2020",
+  "issuedBy": "MVD Russia",
+  "citizenship": "Russian Federation"
+}
+```
+
+### Driver License
+```json
+{
+  "fullName": "IVANOV IVAN",
+  "licenseNumber": "12 34 567890",
+  "dateOfBirth": "01.01.1990",
+  "categories": ["B", "C"],
+  "issueDate": "01.01.2020",
+  "expiryDate": "01.01.2030"
+}
+```
+
+### Birth Certificate
+```json
+{
+  "childName": "IVANOV IVAN IVANOVICH",
+  "dateOfBirth": "01.01.1990",
+  "placeOfBirth": "Moscow",
+  "fatherName": "IVANOV PETR SERGEEVICH",
+  "motherName": "IVANOVA MARIA ALEXANDROVNA",
+  "certificateNumber": "XII-МЮ №123456"
+}
+```
 
 ## 📊 Supported Document Types
 
@@ -354,92 +394,10 @@ source .venv/bin/activate
 python main.py    # Run service
 ```
 
-## 🐛 Troubleshooting
-
-### ML Service Issues
-
-**Problem:** `ModuleNotFoundError: No module named 'transformers'`
-```bash
-cd apps/ml-service
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-**Problem:** Model download fails
-```bash
-# Set cache directory
-export HF_HOME=/path/to/cache
-python -c "from transformers import pipeline; pipeline('zero-shot-classification', model='facebook/bart-large-mnli')"
-```
-
-### Backend Issues
-
-**Problem:** Database connection failed
-- Check PostgreSQL is running: `psql -U postgres -l`
-- Verify DATABASE_URL in `.env`
-- Run migrations: `npx prisma db push`
-
-**Problem:** MinIO connection failed
-- Check MinIO is running: visit http://localhost:9000
-- Verify MINIO_HOST and MINIO_PORT in `.env`
-
-**Problem:** Redis connection failed
-- Check Redis is running: `redis-cli ping` (should return `PONG`)
-- Verify REDIS_HOST and REDIS_PORT in `.env`
-
-### Frontend Issues
-
-**Problem:** API requests fail
-- Check backend is running on port 3000
-- Verify VITE_API_URL in `.env`
-- Check CORS settings in backend
-
-### General Issues
-
-**Problem:** Port already in use
-```bash
-# Find and kill process
-lsof -ti:3000 | xargs kill  # Backend
-lsof -ti:8000 | xargs kill  # ML Service
-lsof -ti:5174 | xargs kill  # Frontend
-```
-
 ## 📚 API Documentation
 
 ### Backend tRPC API
 - Endpoint: http://localhost:3000/trpc
-
-### ML Service API
-- Swagger: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-
-## 🔐 Security Notes
-
-**For Production:**
-- Change default passwords in `.env`
-- Set up proper CORS origins
-- Use environment variables for all secrets
-- Enable authentication
-- Use HTTPS
-- Secure MinIO with proper credentials
-
-## 📄 License
-
-MIT
-
-## 👥 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Open a Pull Request
-
-## 🆘 Support
-
-For issues and questions:
-- Create an issue on GitHub
-- Check existing documentation in `apps/*/README.md`
 
 ---
 
