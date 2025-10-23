@@ -9,6 +9,7 @@ import logging
 
 from classifier import get_classifier
 from extractor import get_extractor
+from rag_extractor import get_rag_extractor
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -65,6 +66,13 @@ async def startup_event():
     logger.info("Starting ML service...")
     logger.info("Loading classifier model (this may take a minute)...")
     get_classifier()  # Pre-load the model
+    logger.info("Initializing RAG extractor with vector store...")
+    try:
+        get_rag_extractor()  # Pre-load RAG extractor
+        logger.info("RAG extractor ready!")
+    except Exception as e:
+        logger.warning(f"RAG extractor initialization warning: {e}")
+        logger.warning("RAG features may not be available")
     logger.info("ML service ready!")
 
 
@@ -182,6 +190,73 @@ async def extract_document_info(request: ExtractionRequest):
         raise HTTPException(
             status_code=500,
             detail=f"Extraction failed: {str(e)}"
+        )
+
+
+@app.post("/extract-with-rag", response_model=ExtractionResponse)
+async def extract_with_rag(request: ExtractionRequest):
+    """
+    Extract structured information using RAG (Retrieval-Augmented Generation)
+    
+    This endpoint uses similar document examples to improve extraction accuracy.
+    The system learns from previously processed documents and uses them as
+    few-shot examples for better results, especially with OCR errors.
+    
+    Args:
+        request: Extraction request with document type and text
+        
+    Returns:
+        Extracted structured information (enhanced with RAG)
+    """
+    try:
+        if not request.text or len(request.text.strip()) < 10:
+            raise HTTPException(
+                status_code=400,
+                detail="Text too short for extraction"
+            )
+        
+        if not request.document_type:
+            raise HTTPException(
+                status_code=400,
+                detail="Document type is required"
+            )
+        
+        logger.info(f"Received RAG extraction request for {request.document_type} (text length: {len(request.text)})")
+        
+        rag_extractor = get_rag_extractor()
+        extracted_data = rag_extractor.extract_with_rag(
+            document_type=request.document_type,
+            ocr_text=request.text,
+            save_result=True  # Save successful extractions to vector store
+        )
+        
+        return ExtractionResponse(extracted_data=extracted_data)
+        
+    except Exception as e:
+        logger.error(f"RAG extraction error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"RAG extraction failed: {str(e)}"
+        )
+
+
+@app.get("/stats")
+async def get_stats():
+    """
+    Get statistics about the vector store
+    
+    Returns:
+        Statistics including total documents and breakdown by type
+    """
+    try:
+        rag_extractor = get_rag_extractor()
+        stats = rag_extractor.get_stats()
+        return stats
+    except Exception as e:
+        logger.error(f"Failed to get stats: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get stats: {str(e)}"
         )
 
 

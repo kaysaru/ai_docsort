@@ -49,10 +49,59 @@ services:
       timeout: 20s
       retries: 3
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ai_docsort_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: ai_docsort_ollama_init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ./apps/ml-service/init-ollama.sh:/init-ollama.sh
+    entrypoint: ["/bin/bash", "/init-ollama.sh"]
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    network_mode: "service:ollama"
+    restart: "no"
+
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: ai_docsort_chromadb
+    ports:
+      - "8001:8000"
+    volumes:
+      - chromadb_data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/api/v1/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
 volumes:
   postgres_data:
     driver: local
   redis_data:
     driver: local
   minio_data:
+    driver: local
+  ollama_data:
+    driver: local
+  chromadb_data:
     driver: local

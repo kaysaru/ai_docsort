@@ -8,7 +8,7 @@ done
 
 echo "Ollama is ready!"
 
-# Check if model already exists
+# Check if qwen2.5:3b model already exists
 if ollama list | grep -q "qwen2.5:3b"; then
   echo "Model qwen2.5:3b already exists, skipping download."
 else
@@ -16,3 +16,14 @@ else
   ollama pull qwen2.5:3b
   echo "Model downloaded successfully!"
 fi
+
+# Check if nomic-embed-text model already exists (for RAG embeddings)
+if ollama list | grep -q "nomic-embed-text"; then
+  echo "Model nomic-embed-text already exists, skipping download."
+else
+  echo "Pulling nomic-embed-text model for embeddings..."
+  ollama pull nomic-embed-text
+  echo "Embedding model downloaded successfully!"
+fi
+
+echo "All models ready!"

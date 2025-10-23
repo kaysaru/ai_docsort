@@ -2,7 +2,7 @@
 import { RedisOptions } from "ioredis";
 import { Queue, Worker } from "bullmq";
 import { runOCR } from "./services/ocr";
-import { runML } from "./services/ml";
+import { runML, extractWithRAG } from "./services/ml";
 import { prisma } from "./db/db";
 import { minioClient } from "./minio";
 import { mapDocumentTypeToCatalog } from "./services/catalogMapper";
@@ -55,32 +55,20 @@ export const fileWorker = new Worker(
       
       console.log(`ML classification: ${mlResult.documentType} (${(mlResult.confidence * 100).toFixed(1)}% confidence)`);
 
-      // Extract structured information using LLM
-      console.log('Extracting structured information...');
+      // Extract structured information using RAG-enhanced LLM
+      console.log('Extracting structured information with RAG...');
       let extractedData = null;
       
       try {
-        const mlServiceUrl = process.env.ML_SERVICE_URL || 'http://localhost:8000';
-        const extractResponse = await fetch(`${mlServiceUrl}/extract`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            document_type: mlResult.documentType,
-            text: ocrText
-          })
-        });
-
-        if (extractResponse.ok) {
-          const extractResult = await extractResponse.json();
-          extractedData = extractResult.extracted_data;
-          console.log(`Extracted ${Object.keys(extractedData).length} fields`);
+        extractedData = await extractWithRAG(mlResult.documentType, ocrText);
+        
+        if (extractedData && Object.keys(extractedData).length > 0) {
+          console.log(`RAG extraction: ${Object.keys(extractedData).length} fields extracted`);
         } else {
-          console.warn('Extraction failed, continuing without structured data');
+          console.warn('RAG extraction returned no data');
         }
       } catch (extractError) {
-        console.error('Extraction error:', extractError);
+        console.error('RAG extraction error:', extractError);
         console.warn('Continuing without structured data');
       }
 
